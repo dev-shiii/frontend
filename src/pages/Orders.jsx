@@ -23,14 +23,12 @@ export default function Orders() {
   };
 
   useEffect(() => {
-    // 🔥 FIX: isRegistered is a boolean, not a function
     if (!isRegistered) {
       alert("You are not registered. Please register first.");
       nav("/register");
       return;
     }
 
-    // 🔥 FIX: isLoggedIn is a boolean, not a function
     if (!isLoggedIn) {
       alert("Please log in to continue.");
       nav("/login");
@@ -48,9 +46,42 @@ export default function Orders() {
       </div>
     );
 
+  /* ⭐ FIXED — Secure Invoice Download */
+  const downloadInvoice = async (orderId) => {
+    try {
+      const url = `${import.meta.env.VITE_API_URL}/orders/${orderId}/invoice`;
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to download invoice");
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `invoice_${orderId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Invoice download error:", err);
+      alert("Failed to download invoice. Please try again.");
+    }
+  };
+
   return (
     <div className="relative min-h-screen p-6">
-      {/* Background */}
       <ThreeWavyBackground />
 
       <h2 className="text-3xl font-bold text-center mb-6 text-white drop-shadow-lg relative z-10">
@@ -67,13 +98,8 @@ export default function Orders() {
             <motion.div
               key={order._id}
               className="
-                bg-white/10
-                backdrop-blur-md
-                border border-white/20
-                rounded-xl
-                p-6
-                shadow-xl
-                text-white
+                bg-white/10 backdrop-blur-md border border-white/20
+                rounded-xl p-6 shadow-xl text-white
               "
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -105,24 +131,16 @@ export default function Orders() {
                 {order.items.map((item) => (
                   <div
                     key={item._id}
-                    className="
-                      flex items-center gap-4 
-                      bg-white/10 
-                      backdrop-blur-sm 
-                      border border-white/10
-                      p-3 
-                      rounded-lg 
-                      shadow-md
-                    "
+                    className="flex items-center gap-4 bg-white/10 
+                               backdrop-blur-sm border border-white/10
+                               p-3 rounded-lg shadow-md"
                   >
-                    {/* Item Image */}
                     <img
                       src={item.productId?.image}
                       alt={item.productId?.name}
                       className="w-16 h-16 rounded-lg object-cover shadow"
                     />
 
-                    {/* Item Info */}
                     <div>
                       <p className="font-semibold text-white">
                         {item.productId?.name}
@@ -138,6 +156,19 @@ export default function Orders() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* ⭐ DOWNLOAD BUTTON */}
+              <div className="mt-5 flex justify-end">
+                <button
+                  onClick={() => downloadInvoice(order._id)}
+                  className="
+                    px-4 py-2 bg-blue-600 hover:bg-blue-700
+                    text-white rounded-lg shadow transition
+                  "
+                >
+                  Download Invoice
+                </button>
               </div>
             </motion.div>
           ))}
