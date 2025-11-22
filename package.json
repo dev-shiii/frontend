@@ -13,6 +13,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^7.3.5",
+    "@stripe/stripe-js": "^8.5.2",
     "axios": "^1.13.2",
     "framer-motion": "^12.23.24",
     "react": "^19.2.0",

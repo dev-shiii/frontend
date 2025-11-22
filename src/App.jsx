@@ -12,8 +12,12 @@ import AddProduct from "./pages/AddProduct";
 import OrderPage from "./pages/OrderPage";
 import Compare from "./pages/Compare";
 import CompareBar from "./components/CompareBar";
-import AdminPanel from "./pages/AdminPanel"
+import AdminPanel from "./pages/AdminPanel";
 import Checkout from "./pages/Checkout";
+
+// ⭐ New Pages (Stripe)
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancel from "./pages/PaymentCancel";
 
 import "./index.css";
 
@@ -33,6 +37,10 @@ export default function App() {
 
         <Route path="/order/:id/pay" element={<OrderPage />} />
         <Route path="/order/:id" element={<OrderDetails />} />
+
+        {/* Stripe Payment Routes */}
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/payment-cancel" element={<PaymentCancel />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
