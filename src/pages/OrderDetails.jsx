@@ -9,90 +9,113 @@ function OrderDetails() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tracking, setTracking] = useState(null);
 
   const [showTrackModal, setShowTrackModal] = useState(false);
+  const [tracking, setTracking] = useState(null);
+
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
-  // Load order
-  const loadOrder = async () => {
+  // ----------------------------------------
+  // LOAD ORDER + TRACKING
+  // ----------------------------------------
+  const load = async () => {
     try {
       const res = await api.get(`/orders/${id}`);
       setOrder(res.data.order);
     } catch (err) {
-      console.error("Order load error:", err);
+      console.error("Load order error", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Load tracking
   const fetchTracking = async () => {
     try {
-      const res = await api.get(`/tracking/${id}`); // ✔ FIXED URL
+      const res = await api.get(`/tracking/${id}`);
       setTracking(res.data);
       return res.data;
     } catch (err) {
-      console.error("Tracking fetch error:", err);
+      console.error("Tracking error:", err);
       return null;
     }
   };
 
-  // Load order and tracking on page load
   useEffect(() => {
-    loadOrder();
+    load();
     fetchTracking();
   }, [id]);
 
-  // Open tracking modal + map
+  // ----------------------------------------
+  // DISABLE BODY SCROLL WHEN MODAL OPENS
+  // ----------------------------------------
+  useEffect(() => {
+    if (showTrackModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => (document.body.style.overflow = "auto");
+  }, [showTrackModal]);
+
+  // ----------------------------------------
+  // OPEN MODAL + INIT MAP
+  // ----------------------------------------
   const openTrackingModal = async () => {
     setShowTrackModal(true);
 
     const t = await fetchTracking();
-    const maps = await loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+    if (!t) return;
 
-    const center = t?.tracking?.currentLocation?.lat
-      ? {
-          lat: Number(t.tracking.currentLocation.lat),
-          lng: Number(t.tracking.currentLocation.lng),
-        }
-      : { lat: 20.5937, lng: 78.9629 };
+    try {
+      const maps = await loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
 
-    if (!mapRef.current) {
-      mapRef.current = new maps.Map(document.getElementById("order-track-map"), {
-        center,
-        zoom: 7,
-      });
-    } else {
-      mapRef.current.setCenter(center);
+      const center = t?.tracking?.currentLocation?.lat
+        ? {
+            lat: Number(t.tracking.currentLocation.lat),
+            lng: Number(t.tracking.currentLocation.lng),
+          }
+        : { lat: 20.5937, lng: 78.9629 };
+
+      if (!mapRef.current) {
+        mapRef.current = new maps.Map(document.getElementById("order-track-map"), {
+          center,
+          zoom: 7,
+        });
+      } else {
+        mapRef.current.setCenter(center);
+      }
+
+      if (!markerRef.current) {
+        markerRef.current = new maps.Marker({
+          position: center,
+          map: mapRef.current,
+          title: "Package",
+        });
+      } else {
+        markerRef.current.setPosition(center);
+      }
+
+      drawHistoryPath(t.tracking.history || []);
+    } catch (err) {
+      console.error("Google Maps Load Error:", err);
     }
 
-    if (!markerRef.current) {
-      markerRef.current = new maps.Marker({
-        position: center,
-        map: mapRef.current,
-        title: "Package",
-      });
-    } else {
-      markerRef.current.setPosition(center);
-    }
-
-    drawPath(t?.tracking?.history || []);
-
-    // Poll updates
+    // LIVE POLLING
     pollIntervalRef.current = setInterval(async () => {
-      const updated = await fetchTracking();
-      if (!updated?.tracking) return;
+      const newT = await fetchTracking();
+      if (!newT?.tracking?.currentLocation) return;
 
-      const loc = updated.tracking.currentLocation;
-      const pos = { lat: Number(loc.lat), lng: Number(loc.lng) };
+      const pos = {
+        lat: Number(newT.tracking.currentLocation.lat),
+        lng: Number(newT.tracking.currentLocation.lng),
+      };
 
-      markerRef.current.setPosition(pos);
-      mapRef.current.panTo(pos);
+      if (markerRef.current) markerRef.current.setPosition(pos);
+      if (mapRef.current) mapRef.current.panTo(pos);
 
-      drawPath(updated.tracking.history || []);
+      drawHistoryPath(newT.tracking.history || []);
     }, 10000);
   };
 
@@ -101,16 +124,16 @@ function OrderDetails() {
     clearInterval(pollIntervalRef.current);
   };
 
-  // Drawing polyline on map
-  const drawPath = (history = []) => {
+  // ----------------------------------------
+  // DRAW ROUTE
+  // ----------------------------------------
+  const drawHistoryPath = (history = []) => {
     if (!window.google || !mapRef.current) return;
 
-    if (mapRef.current._poly) {
-      mapRef.current._poly.setMap(null);
-    }
+    if (mapRef.current._path) mapRef.current._path.setMap(null);
 
     const coords = history
-      .filter((h) => h.location?.lat && h.location.lng)
+      .filter((h) => h.location?.lat && h.location?.lng)
       .map((h) => ({
         lat: Number(h.location.lat),
         lng: Number(h.location.lng),
@@ -128,10 +151,12 @@ function OrderDetails() {
     });
 
     poly.setMap(mapRef.current);
-    mapRef.current._poly = poly;
+    mapRef.current._path = poly;
   };
 
-  // Stripe payment
+  // ----------------------------------------
+  // PAYMENT
+  // ----------------------------------------
   const handlePayment = async () => {
     try {
       const res = await api.post("/payment/create-session", {
@@ -139,14 +164,15 @@ function OrderDetails() {
         amount: order.totalAmount,
         payee: order?.userName || "Customer",
       });
-
       window.location.href = res.data.url;
-    } catch (err) {
+    } catch {
       alert("Payment failed");
     }
   };
 
-  // Invoice download
+  // ----------------------------------------
+  // INVOICE
+  // ----------------------------------------
   const downloadInvoice = async () => {
     try {
       const url = `${import.meta.env.VITE_API_URL}/orders/${id}/invoice`;
@@ -156,75 +182,86 @@ function OrderDetails() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
+      if (!res.ok) throw new Error("Invoice error");
 
+      const blob = await res.blob();
       const a = document.createElement("a");
-      a.href = blobUrl;
+      a.href = URL.createObjectURL(blob);
       a.download = `invoice_${id}.pdf`;
       a.click();
-
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      alert("Invoice download failed");
+    } catch {
+      alert("Failed to download invoice");
     }
   };
 
+  // ----------------------------------------
+  // LOADING
+  // ----------------------------------------
   if (loading)
     return (
-      <div className="text-white text-xl flex items-center justify-center min-h-screen relative">
+      <div className="relative flex justify-center items-center min-h-screen text-white text-xl">
         <ThreeWavyBackground />
         Loading order...
       </div>
     );
 
+  // ----------------------------------------
+  // UI
+  // ----------------------------------------
   return (
     <div className="relative min-h-screen px-6 py-10">
       <ThreeWavyBackground />
-      <div className="max-w-4xl mx-auto relative z-10">
 
+      <div className="max-w-4xl mx-auto relative z-10">
+        {/* ORDER CARD */}
         <motion.div
           className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6 shadow-xl text-white"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1 }}
         >
-          <h2 className="text-2xl font-bold">Order #{order._id}</h2>
+          <h2 className="text-2xl font-bold mb-2">Order #{order._id}</h2>
 
-          <p className="text-gray-300 mt-1">
-            Status: <span className="text-green-300">{order.status}</span>
+          <p className="text-gray-300 mb-1">
+            Status:
+            <span className="text-green-300 font-semibold"> {order.status}</span>
           </p>
 
-          {/* ⭐ Delivery Countdown */}
           {tracking?.delivery && (
-            <p className="text-yellow-300 mt-1">
+            <p className="text-yellow-300 mb-1">
               Delivery in: {tracking.delivery.remainingDays} days
             </p>
           )}
 
-          {/* ⭐ Delivered Message */}
           {tracking?.tracking?.status === "delivered" && (
-            <p className="text-green-400 font-semibold text-lg mt-2">
-              🎉 Your product is delivered!
-            </p>
+            <p className="text-green-400 font-bold text-lg">🎉 Delivered!</p>
           )}
 
-          <p className="text-gray-300 mt-2 mb-4">
+          <p className="text-gray-300 mb-4">
             Total:{" "}
             <span className="text-green-400 font-semibold">
               ₹{order.totalAmount}
             </span>
           </p>
 
-          <div className="flex gap-3 mt-4">
-            <button onClick={handlePayment} className="px-4 py-2 bg-green-600 rounded">
+          <div className="mt-4 flex gap-3">
+            <button
+              onClick={handlePayment}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
+            >
               Pay Now
             </button>
 
-            <button onClick={downloadInvoice} className="px-4 py-2 bg-blue-600 rounded">
+            <button
+              onClick={downloadInvoice}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+            >
               Download Invoice
             </button>
 
-            <button onClick={openTrackingModal} className="px-4 py-2 bg-yellow-600 rounded">
+            <button
+              onClick={openTrackingModal}
+              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded"
+            >
               Track Package
             </button>
           </div>
@@ -258,31 +295,35 @@ function OrderDetails() {
             <div
               className="absolute inset-0 bg-black/60"
               onClick={closeTrackingModal}
-            />
+            ></div>
 
-            <div className="relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-xl w-11/12 max-w-4xl text-white">
-              <div className="flex justify-between">
+            <div className="relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 
+              p-6 rounded-xl w-11/12 max-w-4xl text-white 
+              max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex justify-between mb-3">
                 <h3 className="text-xl font-semibold">Package Tracking</h3>
                 <button
                   onClick={closeTrackingModal}
-                  className="px-4 py-1 bg-red-600 rounded"
+                  className="px-4 py-1 bg-red-600 hover:bg-red-700 rounded"
                 >
                   Close
                 </button>
               </div>
 
-              <p className="mt-2">
-                Status: <strong>{tracking.tracking?.status}</strong>
+              <p className="text-sm mb-1">
+                Status:{" "}
+                <span className="font-semibold">{tracking.tracking?.status}</span>
               </p>
 
               {tracking.delivery && (
-                <p className="text-yellow-300 mt-1">
+                <p className="text-yellow-300 mb-2">
                   Delivery in: {tracking.delivery.remainingDays} days
                 </p>
               )}
 
               {tracking.tracking?.status === "delivered" && (
-                <p className="text-green-400 text-lg font-semibold mt-2">
+                <p className="text-green-400 font-bold text-lg">
                   🎉 Your product is delivered!
                 </p>
               )}
@@ -295,11 +336,12 @@ function OrderDetails() {
                 {tracking.tracking?.history?.length ? (
                   tracking.tracking.history.map((h, i) => (
                     <div key={i} className="text-sm py-2 border-b border-white/10">
-                      <strong>{h.status}</strong> — {h.note}
-                      <br />
-                      <span className="text-xs text-gray-300">
+                      <div>
+                        <strong>{h.status}</strong> — {h.note}
+                      </div>
+                      <div className="text-xs text-gray-300">
                         {new Date(h.at).toLocaleString()}
-                      </span>
+                      </div>
                     </div>
                   ))
                 ) : (
