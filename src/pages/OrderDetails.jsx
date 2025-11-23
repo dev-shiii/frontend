@@ -8,6 +8,7 @@ function OrderDetails() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
 
+  // Load order
   const load = async () => {
     const res = await api.get(`/orders/${id}`);
     setOrder(res.data.order);
@@ -17,6 +18,24 @@ function OrderDetails() {
     load();
   }, []);
 
+  // ⭐ STEP 1 & 2 — Stripe Payment Function
+  const handlePayment = async () => {
+    try {
+      const paymentData = {
+        billType: `Order Payment (${id})`,
+        amount: order.totalAmount,
+        payee: order?.userName || "Unknown User",
+      };
+
+      const res = await api.post("/payment/create-session", paymentData);
+      window.location.href = res.data.url; // redirect to Stripe
+    } catch (err) {
+      console.error("Payment error:", err);
+      alert("Failed to start payment");
+    }
+  };
+
+  // Invoice Download
   const downloadInvoice = async () => {
     try {
       const url = `${import.meta.env.VITE_API_URL}/orders/${id}/invoice`;
@@ -69,6 +88,7 @@ function OrderDetails() {
           Order Details
         </motion.h2>
 
+        {/* ORDER SUMMARY */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -77,25 +97,38 @@ function OrderDetails() {
           <p className="text-lg">
             <strong>Order ID:</strong> {order._id}
           </p>
+
           <p className="text-lg mt-2">
             <strong>Total Items:</strong> {order.items.length}
           </p>
+
           <p className="text-lg mt-2">
             <strong>Payment Method:</strong> {order.paymentMethod}
           </p>
+
           <p className="text-lg mt-2">
             <strong>Status:</strong>{" "}
             <span className="text-green-300 font-semibold">{order.status}</span>
           </p>
 
+          {/* ⭐ PAY NOW BUTTON (STRIPE) */}
+          <button
+            onClick={handlePayment}
+            className="mt-6 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow"
+          >
+            Pay Now (Stripe)
+          </button>
+
+          {/* ⭐ DOWNLOAD INVOICE */}
           <button
             onClick={downloadInvoice}
-            className="mt-6 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow"
+            className="mt-6 ml-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow"
           >
             Download Invoice
           </button>
         </motion.div>
 
+        {/* ITEMS LIST */}
         <h3 className="text-2xl font-semibold text-white mb-4 drop-shadow-lg">
           Items
         </h3>
