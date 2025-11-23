@@ -1,37 +1,153 @@
 import { useParams } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "../services/api";
 import { motion } from "framer-motion";
 import ThreeWavyBackground from "../components/ThreeWavyBackground";
+import loadGoogleMaps from "../utils /loadGoogleMaps";
+
+
+
 
 function OrderDetails() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Load order
+  // TRACKING UI state
+  const [showTrackModal, setShowTrackModal] = useState(false);
+  const [tracking, setTracking] = useState(null);
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const pollIntervalRef = useRef(null);
+
+  // Load order info
   const load = async () => {
-    const res = await api.get(`/orders/${id}`);
-    setOrder(res.data.order);
+    try {
+      const res = await api.get(`/orders/${id}`);
+      setOrder(res.data.order);
+    } catch (err) {
+      console.error("Load order error", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
-  }, []);
+  }, [id]);
 
-  // ⭐ STEP 1 & 2 — Stripe Payment Function
+  // Fetch tracking data
+  const fetchTracking = async () => {
+    try {
+      const res = await api.get(`/tracking/${id}`); 
+      setTracking(res.data || null);
+      return res.data;
+    } catch (err) {
+      console.error("Fetch tracking error", err);
+      return null;
+    }
+  };
+
+  // Open tracking modal + initialize map
+  const openTrackingModal = async () => {
+    setShowTrackModal(true);
+    const t = await fetchTracking();
+
+    try {
+      const maps = await loadGoogleMaps(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+
+      const center = t?.currentLocation?.lat
+        ? { lat: Number(t.currentLocation.lat), lng: Number(t.currentLocation.lng) }
+        : { lat: 20.5937, lng: 78.9629 }; // fallback: India center
+
+      // Create map
+      if (!mapRef.current) {
+        mapRef.current = new maps.Map(document.getElementById("order-track-map"), {
+          center,
+          zoom: 8,
+        });
+      } else {
+        mapRef.current.setCenter(center);
+      }
+
+      // Add marker
+      if (!markerRef.current) {
+        markerRef.current = new maps.Marker({
+          position: center,
+          map: mapRef.current,
+          title: "Package",
+        });
+      } else {
+        markerRef.current.setPosition(center);
+      }
+
+      drawHistoryPath(t?.history || []);
+
+    } catch (err) {
+      console.error("Google Maps error:", err);
+      alert("Failed to load Google Maps. Check your API key.");
+    }
+
+    // Start live polling
+    pollIntervalRef.current = setInterval(async () => {
+      const newT = await fetchTracking();
+      if (newT?.currentLocation && markerRef.current) {
+        const pos = { lat: Number(newT.currentLocation.lat), lng: Number(newT.currentLocation.lng) };
+        markerRef.current.setPosition(pos);
+        mapRef.current.panTo(pos);
+        drawHistoryPath(newT.history || []);
+      }
+    }, 10000);
+  };
+
+  // Close modal + stop polling
+  const closeTrackingModal = () => {
+    setShowTrackModal(false);
+    clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = null;
+  };
+
+  // Draw delivery path on map
+  const drawHistoryPath = (history = []) => {
+    if (!window.google || !window.google.maps || !mapRef.current) return;
+
+    if (mapRef.current._trackPolyline) {
+      mapRef.current._trackPolyline.setMap(null);
+    }
+
+    const coords = history
+      .filter(h => h.location?.lat && h.location?.lng)
+      .map(h => ({ lat: Number(h.location.lat), lng: Number(h.location.lng) }))
+      .reverse();
+
+    if (coords.length < 2) return;
+
+    const poly = new window.google.maps.Polyline({
+      path: coords,
+      geodesic: true,
+      strokeColor: "#2b8cfb",
+      strokeOpacity: 0.9,
+      strokeWeight: 4,
+    });
+
+    poly.setMap(mapRef.current);
+    mapRef.current._trackPolyline = poly;
+  };
+
+  // Stripe Payment
   const handlePayment = async () => {
     try {
-      const paymentData = {
+      const data = {
         billType: `Order Payment (${id})`,
         amount: order.totalAmount,
-        payee: order?.userName || "Unknown User",
+        payee: order?.userName || "Customer",
       };
 
-      const res = await api.post("/payment/create-session", paymentData);
-      window.location.href = res.data.url; // redirect to Stripe
+      const res = await api.post("/payment/create-session", data);
+      window.location.href = res.data.url;
     } catch (err) {
       console.error("Payment error:", err);
-      alert("Failed to start payment");
+      alert("Payment failed");
     }
   };
 
@@ -43,9 +159,7 @@ function OrderDetails() {
 
       const res = await fetch(url, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!res.ok) throw new Error("Failed to download invoice");
@@ -56,17 +170,16 @@ function OrderDetails() {
       const a = document.createElement("a");
       a.href = blobUrl;
       a.download = `invoice_${id}.pdf`;
-      document.body.appendChild(a);
       a.click();
-      a.remove();
+
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error("Invoice download error", err);
+      console.error("Invoice error:", err);
       alert("Failed to download invoice");
     }
   };
 
-  if (!order)
+  if (loading)
     return (
       <div className="relative flex justify-center items-center min-h-screen text-white text-xl">
         <ThreeWavyBackground />
@@ -79,85 +192,91 @@ function OrderDetails() {
       <ThreeWavyBackground />
 
       <div className="max-w-4xl mx-auto relative z-10">
-        <motion.h2
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          className="text-3xl font-bold text-white mb-6 drop-shadow-lg"
-        >
-          Order Details
-        </motion.h2>
-
-        {/* ORDER SUMMARY */}
+        
+        {/* Card */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="bg-white/10 backdrop-blur-md border border-white/20 p-6 shadow-xl rounded-xl mb-8 text-white"
+          className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6 shadow-xl text-white"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
         >
-          <p className="text-lg">
-            <strong>Order ID:</strong> {order._id}
+          <h2 className="text-2xl font-bold mb-2">Order #{order._id}</h2>
+
+          <p className="text-gray-300">
+            Status: <span className="text-green-300 font-semibold">{order.status}</span>
           </p>
 
-          <p className="text-lg mt-2">
-            <strong>Total Items:</strong> {order.items.length}
+          <p className="text-gray-300">
+            Total: <span className="text-green-400 font-semibold">₹{order.totalAmount}</span>
           </p>
 
-          <p className="text-lg mt-2">
-            <strong>Payment Method:</strong> {order.paymentMethod}
-          </p>
-
-          <p className="text-lg mt-2">
-            <strong>Status:</strong>{" "}
-            <span className="text-green-300 font-semibold">{order.status}</span>
-          </p>
-
-          {/* ⭐ PAY NOW BUTTON (STRIPE) */}
-          <button
-            onClick={handlePayment}
-            className="mt-6 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow"
-          >
-            Pay Now (Stripe)
-          </button>
-
-          {/* ⭐ DOWNLOAD INVOICE */}
-          <button
-            onClick={downloadInvoice}
-            className="mt-6 ml-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow"
-          >
-            Download Invoice
-          </button>
+          <div className="mt-6 flex gap-3">
+            <button onClick={handlePayment} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded">Pay Now</button>
+            <button onClick={downloadInvoice} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">Download Invoice</button>
+            <button onClick={openTrackingModal} className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded">Track Package</button>
+          </div>
         </motion.div>
 
-        {/* ITEMS LIST */}
-        <h3 className="text-2xl font-semibold text-white mb-4 drop-shadow-lg">
-          Items
-        </h3>
-
-        <div className="space-y-4">
+        {/* ITEMS */}
+        <div className="mt-6 space-y-4">
           {order.items.map((item) => (
-            <motion.div
+            <div
               key={item._id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-              className="flex items-center gap-4 bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-lg shadow-md text-white"
+              className="flex items-center gap-4 bg-white/10 border border-white/20 p-4 rounded-xl backdrop-blur-lg text-white"
             >
               <img
                 src={item.productId.image}
                 alt={item.productId.name}
-                className="w-20 h-20 object-cover rounded"
+                className="w-20 h-20 object-cover rounded-xl"
               />
-
               <div>
-                <h4 className="text-lg font-semibold">{item.productId.name}</h4>
-                <p className="text-gray-200">Quantity: {item.quantity}</p>
-                <p className="text-blue-300 font-bold">
-                  Price: ₹{item.productId.price}
-                </p>
+                <p className="font-semibold">{item.productId.name}</p>
+                <p className="text-gray-300 text-sm">Qty: {item.quantity}</p>
+                <p className="text-gray-300 text-sm">₹{item.productId.price}</p>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
+
+        {/* TRACKING MODAL */}
+        {showTrackModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/60" onClick={closeTrackingModal}></div>
+
+            <div className="relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-xl w-11/12 max-w-4xl text-white">
+              
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold">Package Tracking</h3>
+                <button onClick={closeTrackingModal} className="px-4 py-1 bg-red-600 hover:bg-red-700 rounded">
+                  Close
+                </button>
+              </div>
+
+              <p className="text-sm mb-2">
+                Status: <span className="font-semibold">{tracking?.status}</span>
+              </p>
+
+              {/* MAP */}
+              <div id="order-track-map" style={{ height: 400, width: "100%" }} />
+
+              {/* History */}
+              <div className="mt-4 max-h-48 overflow-auto">
+                <h4 className="font-semibold mb-2">Tracking History</h4>
+
+                {tracking?.history?.length ? (
+                  tracking.history.map((h, i) => (
+                    <div key={i} className="text-sm py-2 border-b border-white/10">
+                      <div><strong>{h.status}</strong> — {h.note || "update"}</div>
+                      <div className="text-xs text-gray-300">{new Date(h.at).toLocaleString()}</div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-300 text-sm">No tracking events yet.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

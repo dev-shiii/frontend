@@ -46,7 +46,7 @@ export default function Orders() {
       </div>
     );
 
-  /* ⭐ FIXED — Secure Invoice Download */
+  /* ⭐ Secure Invoice Download */
   const downloadInvoice = async (orderId) => {
     try {
       const url = `${import.meta.env.VITE_API_URL}/orders/${orderId}/invoice`;
@@ -54,14 +54,10 @@ export default function Orders() {
 
       const res = await fetch(url, {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) {
-        throw new Error("Failed to download invoice");
-      }
+      if (!res.ok) throw new Error("Failed to download invoice");
 
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
@@ -97,10 +93,7 @@ export default function Orders() {
           {orders.map((order, index) => (
             <motion.div
               key={order._id}
-              className="
-                bg-white/10 backdrop-blur-md border border-white/20
-                rounded-xl p-6 shadow-xl text-white
-              "
+              className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-6 shadow-xl text-white"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
@@ -124,16 +117,13 @@ export default function Orders() {
                 </p>
               </div>
 
-              {/* Items List */}
+              {/* Items */}
               <h4 className="text-lg font-semibold mb-3">Items:</h4>
-
               <div className="space-y-4">
                 {order.items.map((item) => (
                   <div
                     key={item._id}
-                    className="flex items-center gap-4 bg-white/10 
-                               backdrop-blur-sm border border-white/10
-                               p-3 rounded-lg shadow-md"
+                    className="flex items-center gap-4 bg-white/10 backdrop-blur-sm border border-white/10 p-3 rounded-lg shadow-md"
                   >
                     <img
                       src={item.productId?.image}
@@ -145,11 +135,7 @@ export default function Orders() {
                       <p className="font-semibold text-white">
                         {item.productId?.name}
                       </p>
-
-                      <p className="text-gray-300 text-sm">
-                        Qty: {item.quantity}
-                      </p>
-
+                      <p className="text-gray-300 text-sm">Qty: {item.quantity}</p>
                       <p className="text-gray-300 text-sm">
                         Price: ₹{item.productId?.price}
                       </p>
@@ -158,16 +144,22 @@ export default function Orders() {
                 ))}
               </div>
 
-              {/* ⭐ DOWNLOAD BUTTON */}
-              <div className="mt-5 flex justify-end">
+              {/* ⭐ Buttons */}
+              <div className="mt-5 flex gap-3 justify-end">
+                {/* Download Invoice */}
                 <button
                   onClick={() => downloadInvoice(order._id)}
-                  className="
-                    px-4 py-2 bg-blue-600 hover:bg-blue-700
-                    text-white rounded-lg shadow transition
-                  "
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition"
                 >
                   Download Invoice
+                </button>
+
+                {/* ⭐ NEW – Track Package */}
+                <button
+                  onClick={() => nav(`/order/${order._id}`)}
+                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg shadow transition"
+                >
+                  Track Order
                 </button>
               </div>
             </motion.div>

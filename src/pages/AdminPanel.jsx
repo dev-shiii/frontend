@@ -60,6 +60,7 @@ export default function AdminPanel() {
           ) : (
             selectedUserOrders.map(order => (
               <div key={order._id} className="p-3 bg-white/20 mb-3 rounded">
+
                 <p className="font-semibold">Order ID: {order._id}</p>
                 <p>Status: {order.status}</p>
                 <p>Total: ₹{order.totalAmount}</p>
@@ -71,6 +72,68 @@ export default function AdminPanel() {
                     </li>
                   ))}
                 </ul>
+
+                {/* ⭐ TRACKING UPDATE FORM */}
+                <div className="mt-4 p-3 bg-white/10 rounded border border-white/20">
+                  <h3 className="text-lg font-bold mb-2 text-blue-300">
+                    Update Tracking
+                  </h3>
+
+                  <label className="block text-sm">Latitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="w-full p-2 bg-black/20 border border-white/30 rounded mb-2"
+                    onChange={(e) => (order.tempLat = e.target.value)}
+                    placeholder="Enter latitude"
+                  />
+
+                  <label className="block text-sm">Longitude</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="w-full p-2 bg-black/20 border border-white/30 rounded mb-2"
+                    onChange={(e) => (order.tempLng = e.target.value)}
+                    placeholder="Enter longitude"
+                  />
+
+                  <label className="block text-sm">Status</label>
+                  <input
+                    className="w-full p-2 bg-black/20 border border-white/30 rounded mb-2"
+                    onChange={(e) => (order.tempStatus = e.target.value)}
+                    placeholder="in_transit / out_for_delivery / delivered"
+                  />
+
+                  <label className="block text-sm">Note</label>
+                  <input
+                    className="w-full p-2 bg-black/20 border border-white/30 rounded mb-2"
+                    onChange={(e) => (order.tempNote = e.target.value)}
+                    placeholder="Optional update note"
+                  />
+
+                  <button
+                    onClick={async () => {
+                      try {
+                        await api.patch(`/tracking/${order._id}`, {
+                          lat: Number(order.tempLat),
+                          lng: Number(order.tempLng),
+                          status: order.tempStatus,
+                          note: order.tempNote,
+                        });
+
+                        alert("Tracking updated!");
+                      } catch (err) {
+                        console.error(err);
+                        alert("Failed to update tracking");
+                      }
+                    }}
+                    className="w-full mt-2 bg-green-600 hover:bg-green-700 py-2 rounded text-white"
+                  >
+                    Save Tracking
+                  </button>
+                </div>
+                {/* END TRACKING FORM */}
+
               </div>
             ))
           )}
