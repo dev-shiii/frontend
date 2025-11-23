@@ -17,9 +17,6 @@ function OrderDetails() {
   const markerRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
-  // ----------------------------------------
-  // LOAD ORDER + TRACKING
-  // ----------------------------------------
   const load = async () => {
     try {
       const res = await api.get(`/orders/${id}`);
@@ -47,21 +44,12 @@ function OrderDetails() {
     fetchTracking();
   }, [id]);
 
-  // ----------------------------------------
-  // DISABLE BODY SCROLL WHEN MODAL OPENS
-  // ----------------------------------------
+  // disable background scroll
   useEffect(() => {
-    if (showTrackModal) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
+    document.body.style.overflow = showTrackModal ? "hidden" : "auto";
     return () => (document.body.style.overflow = "auto");
   }, [showTrackModal]);
 
-  // ----------------------------------------
-  // OPEN MODAL + INIT MAP
-  // ----------------------------------------
   const openTrackingModal = async () => {
     setShowTrackModal(true);
 
@@ -78,10 +66,14 @@ function OrderDetails() {
           }
         : { lat: 20.5937, lng: 78.9629 };
 
+      // 🟢 DRAGGABLE MAP ENABLED HERE
       if (!mapRef.current) {
         mapRef.current = new maps.Map(document.getElementById("order-track-map"), {
           center,
           zoom: 7,
+          gestureHandling: "greedy",  // <—
+          draggable: true,            // <—
+          scrollwheel: true,          // <—
         });
       } else {
         mapRef.current.setCenter(center);
@@ -102,7 +94,6 @@ function OrderDetails() {
       console.error("Google Maps Load Error:", err);
     }
 
-    // LIVE POLLING
     pollIntervalRef.current = setInterval(async () => {
       const newT = await fetchTracking();
       if (!newT?.tracking?.currentLocation) return;
@@ -112,8 +103,8 @@ function OrderDetails() {
         lng: Number(newT.tracking.currentLocation.lng),
       };
 
-      if (markerRef.current) markerRef.current.setPosition(pos);
-      if (mapRef.current) mapRef.current.panTo(pos);
+      markerRef.current?.setPosition(pos);
+      mapRef.current?.panTo(pos);
 
       drawHistoryPath(newT.tracking.history || []);
     }, 10000);
@@ -124,9 +115,6 @@ function OrderDetails() {
     clearInterval(pollIntervalRef.current);
   };
 
-  // ----------------------------------------
-  // DRAW ROUTE
-  // ----------------------------------------
   const drawHistoryPath = (history = []) => {
     if (!window.google || !mapRef.current) return;
 
@@ -154,9 +142,6 @@ function OrderDetails() {
     mapRef.current._path = poly;
   };
 
-  // ----------------------------------------
-  // PAYMENT
-  // ----------------------------------------
   const handlePayment = async () => {
     try {
       const res = await api.post("/payment/create-session", {
@@ -170,9 +155,6 @@ function OrderDetails() {
     }
   };
 
-  // ----------------------------------------
-  // INVOICE
-  // ----------------------------------------
   const downloadInvoice = async () => {
     try {
       const url = `${import.meta.env.VITE_API_URL}/orders/${id}/invoice`;
@@ -194,9 +176,6 @@ function OrderDetails() {
     }
   };
 
-  // ----------------------------------------
-  // LOADING
-  // ----------------------------------------
   if (loading)
     return (
       <div className="relative flex justify-center items-center min-h-screen text-white text-xl">
@@ -205,15 +184,12 @@ function OrderDetails() {
       </div>
     );
 
-  // ----------------------------------------
-  // UI
-  // ----------------------------------------
   return (
     <div className="relative min-h-screen px-6 py-10">
       <ThreeWavyBackground />
 
       <div className="max-w-4xl mx-auto relative z-10">
-        {/* ORDER CARD */}
+        {/* ORDER INFO */}
         <motion.div
           className="bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6 shadow-xl text-white"
           initial={{ opacity: 0, y: 20 }}
@@ -222,8 +198,8 @@ function OrderDetails() {
           <h2 className="text-2xl font-bold mb-2">Order #{order._id}</h2>
 
           <p className="text-gray-300 mb-1">
-            Status:
-            <span className="text-green-300 font-semibold"> {order.status}</span>
+            Status:{" "}
+            <span className="text-green-300 font-semibold">{order.status}</span>
           </p>
 
           {tracking?.delivery && (
@@ -244,23 +220,15 @@ function OrderDetails() {
           </p>
 
           <div className="mt-4 flex gap-3">
-            <button
-              onClick={handlePayment}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded"
-            >
+            <button onClick={handlePayment} className="px-4 py-2 bg-green-600 rounded">
               Pay Now
             </button>
-
-            <button
-              onClick={downloadInvoice}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
-            >
+            <button onClick={downloadInvoice} className="px-4 py-2 bg-blue-600 rounded">
               Download Invoice
             </button>
-
             <button
               onClick={openTrackingModal}
-              className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded"
+              className="px-4 py-2 bg-yellow-600 rounded"
             >
               Track Package
             </button>
@@ -274,16 +242,11 @@ function OrderDetails() {
               key={item._id}
               className="flex items-center gap-4 bg-white/10 p-4 rounded-xl border border-white/20 backdrop-blur-lg text-white"
             >
-              <img
-                src={item.productId.image}
-                className="w-20 h-20 rounded-xl object-cover"
-              />
+              <img src={item.productId.image} className="w-20 h-20 rounded-xl" />
               <div>
                 <p className="font-semibold">{item.productId.name}</p>
                 <p className="text-gray-300 text-sm">Qty: {item.quantity}</p>
-                <p className="text-gray-300 text-sm">
-                  ₹{item.productId.price}
-                </p>
+                <p className="text-gray-300 text-sm">₹{item.productId.price}</p>
               </div>
             </div>
           ))}
@@ -292,28 +255,21 @@ function OrderDetails() {
         {/* TRACKING MODAL */}
         {showTrackModal && tracking && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/60"
-              onClick={closeTrackingModal}
-            ></div>
+            <div className="absolute inset-0 bg-black/60" onClick={closeTrackingModal}></div>
 
-            <div className="relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 
-              p-6 rounded-xl w-11/12 max-w-4xl text-white 
-              max-h-[90vh] overflow-y-auto"
+            <div
+              className="relative z-10 bg-white/10 backdrop-blur-xl border border-white/20 
+              p-6 rounded-xl w-11/12 max-w-4xl text-white max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between mb-3">
                 <h3 className="text-xl font-semibold">Package Tracking</h3>
-                <button
-                  onClick={closeTrackingModal}
-                  className="px-4 py-1 bg-red-600 hover:bg-red-700 rounded"
-                >
+                <button onClick={closeTrackingModal} className="px-4 py-1 bg-red-600 rounded">
                   Close
                 </button>
               </div>
 
               <p className="text-sm mb-1">
-                Status:{" "}
-                <span className="font-semibold">{tracking.tracking?.status}</span>
+                Status: <span className="font-semibold">{tracking.tracking?.status}</span>
               </p>
 
               {tracking.delivery && (
