@@ -31,7 +31,7 @@ function OrderDetails() {
   // Load tracking
   const fetchTracking = async () => {
     try {
-      const res = await api.get(`/api/tracking/${id}`); // ✔ FIXED URL
+      const res = await api.get(`/tracking/${id}`); // ✔ FIXED URL
       setTracking(res.data);
       return res.data;
     } catch (err) {
