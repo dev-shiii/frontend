@@ -15,9 +15,12 @@ import CompareBar from "./components/CompareBar";
 import AdminPanel from "./pages/AdminPanel";
 import Checkout from "./pages/Checkout";
 
-// ⭐ New Pages (Stripe)
+// ⭐ Stripe Pages
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
+
+// ⭐ NEW — Nearby Products Map Page
+import NearbyProductsMap from "./pages/NearbyProductsMap";
 
 import "./index.css";
 
@@ -42,15 +45,22 @@ export default function App() {
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancel" element={<PaymentCancel />} />
 
+        {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/admin" element={<AdminPanel />} />
 
+        {/* Admin */}
+        <Route path="/admin" element={<AdminPanel />} />
         <Route path="/add-product" element={<AddProduct />} />
+
+        {/* Compare */}
         <Route path="/compare" element={<Compare />} />
+
+        {/* ⭐ NEW — Nearby Products Route */}
+        <Route path="/nearby" element={<NearbyProductsMap />} />
       </Routes>
 
-      {/* Floating Compare Bar (must be outside Routes) */}
+      {/* Floating Compare Bar */}
       <CompareBar />
     </>
   );

@@ -1,20 +1,23 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";   // ⭐ ADDED
 import api from "../services/api";
 
 import ProductCard from "../components/ProductCard";
-import ThreeWavyBackground from "../components/ThreeWavyBackground"; // ⬅ ADD THIS
+import ThreeWavyBackground from "../components/ThreeWavyBackground";
 import { motion } from "framer-motion";
 
 export default function Home() {
+  const navigate = useNavigate(); // ⭐ ADDED
+
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // Load all products
   const load = async () => {
     try {
       setLoading(true);
       const res = await api.get("/products");
-      console.log("Home products:", res.data.products);
       setProducts(res.data.products);
     } catch (err) {
       console.error("Failed to fetch products", err);
@@ -23,8 +26,18 @@ export default function Home() {
     }
   };
 
+  // Ask for user location on Home page (optional)
   useEffect(() => {
     load();
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log("User location allowed:", pos.coords);
+      },
+      (err) => {
+        console.warn("Location permission denied", err);
+      }
+    );
   }, []);
 
   const filteredProducts = products.filter((p) =>
@@ -37,11 +50,8 @@ export default function Home() {
   if (loading) {
     return (
       <div className="relative">
-        {/* Background */}
         <ThreeWavyBackground />
-
-        {/* Loader */}
-        <div className="flex justify-center items-center h-96 z-10 relative">
+        <div className="flex justify-center items-center h-96 relative z-10">
           <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
         </div>
       </div>
@@ -50,14 +60,9 @@ export default function Home() {
 
   return (
     <div className="relative">
-
-      {/* ⬅ 3D Wavy Background */}
       <ThreeWavyBackground intensity={0.9} speed={0.6} color={0x0e1b33} />
 
-      {/* Foreground Content */}
       <div className="max-w-6xl mx-auto px-6 py-10 relative z-10">
-
-        {/* Title */}
         <motion.h2
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -67,6 +72,14 @@ export default function Home() {
           All Products
         </motion.h2>
 
+        {/* ⭐ NEARBY PRODUCTS MAP BUTTON (NEW BEHAVIOR) */}
+        <button
+          onClick={() => navigate("/nearby")}    // ⭐ CHANGED
+          className="mb-4 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg shadow-lg"
+        >
+          📍 Show Nearby Products on Map
+        </button>
+
         {/* Search Bar */}
         <motion.input
           initial={{ opacity: 0 }}
@@ -74,17 +87,12 @@ export default function Home() {
           transition={{ delay: 0.2 }}
           type="text"
           placeholder="Search products..."
-          className="
-              w-full p-3 
-              border rounded-lg shadow-sm mb-8 
-              bg-white/90 backdrop-blur 
-              focus:outline-none focus:ring-2 focus:ring-blue-500
-            "
+          className="w-full p-3 border rounded-lg shadow-sm mb-8 bg-white/90 backdrop-blur focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        {/* Product Grid */}
+        {/* All Products */}
         <motion.div
           initial="hidden"
           animate="visible"
