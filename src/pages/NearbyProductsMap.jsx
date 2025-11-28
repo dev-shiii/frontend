@@ -2,16 +2,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import api from "../services/api";
 import loadGoogleMaps from "../utils/loadGoogleMaps";
+import { useNavigate } from "react-router-dom";
 
 export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const userMarkerRef = useRef(null);
-  const infoWindowRef = useRef(null);
 
-  const [status, setStatus] = useState("idle"); 
-  const [userPos, setUserPos] = useState(null);
+  const [status, setStatus] = useState("idle");
   const [products, setProducts] = useState([]);
+
+  const navigate = useNavigate(); // ⭐ ADDED for redirecting
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -26,10 +27,7 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
 
-        setUserPos({ lat, lng });
-
         try {
-          // ⭐ FIXED HERE — use res.data.products
           const res = await api.get(
             `/products/nearby?lat=${lat}&lng=${lng}&radiusKm=${defaultRadiusKm}`
           );
@@ -42,15 +40,13 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
           );
 
           const center = { lat, lng };
+
           mapRef.current = new maps.Map(document.getElementById("nearby-map"), {
             center,
             zoom: 12,
-            gestureHandling: "auto",
           });
 
-          infoWindowRef.current = new maps.InfoWindow();
-
-          // Add user marker
+          // ⭐ USER marker
           userMarkerRef.current = new maps.Marker({
             position: center,
             map: mapRef.current,
@@ -65,11 +61,11 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
             },
           });
 
-          // Remove old markers
+          // Clear old markers
           markersRef.current.forEach((m) => m.setMap(null));
           markersRef.current = [];
 
-          // Add product markers
+          // ⭐ ADD PRODUCT MARKERS
           res.data.products.forEach((p) => {
             const position = {
               lat: Number(p.location.lat),
@@ -82,28 +78,17 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
               title: p.name,
             });
 
+            // ⭐ CLICK → Redirect user to product page
             marker.addListener("click", () => {
-              const content = `
-                <div style="max-width:220px">
-                  <strong>${p.name}</strong><br/>
-                  <em>${p.category}</em><br/>
-                  Price: ₹${p.price}<br/>
-                  Distance: ${p.distance} km<br/>
-                  <a href="/products/${p._id}">View product</a>
-                </div>
-              `;
-
-              infoWindowRef.current.setContent(content);
-              infoWindowRef.current.open(mapRef.current, marker);
+              navigate(`/products/${p._id}?selected=true`);
             });
 
             markersRef.current.push(marker);
           });
 
-          // Fit bounds to show user + products
+          // Fit bounds
           const bounds = new maps.LatLngBounds();
           bounds.extend(center);
-
           res.data.products.forEach((p) =>
             bounds.extend({
               lat: Number(p.location.lat),
@@ -117,17 +102,13 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
           setStatus("err");
         }
       },
-      (err) => {
-        console.error("Geolocation error:", err);
-        setStatus("err");
-      },
+      () => setStatus("err"),
       { enableHighAccuracy: true, timeout: 10000 }
     );
 
     return () => {
       markersRef.current.forEach((m) => m.setMap(null));
-      if (userMarkerRef.current)
-        userMarkerRef.current.setMap(null);
+      if (userMarkerRef.current) userMarkerRef.current.setMap(null);
     };
   }, []);
 
@@ -136,7 +117,6 @@ export default function NearbyProductsMap({ defaultRadiusKm = 50 }) {
       <h2 className="text-2xl font-bold mb-3">Nearby Products</h2>
 
       {status === "fetching" && <p>Requesting your location...</p>}
-
       {status === "err" && (
         <p className="text-red-400">
           Unable to get location or load map. Check permissions & API key.
